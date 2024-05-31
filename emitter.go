@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 const (
@@ -85,7 +84,7 @@ func (e *Emitter) Emit(ctx context.Context, data ...interface{}) (*Emitter, erro
 
 	chn := fmt.Sprintf("%s#%s#", e.prefix, packet["nsp"])
 
-	buf, err := msgpack.Marshal([]interface{}{e.uid, packet, opts})
+	buf, err := MsgPackMarshal([]interface{}{e.uid, packet, opts}, true)
 	if err != nil {
 		return nil, err
 	}
