@@ -50,3 +50,26 @@ func MsgPackMarshal(obj any, adaptJSON bool) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
+
+func GetMsgPackDecoder(adaptJSON bool) *msgpack.Decoder {
+	decoder := MsgPackDecoderPool.Get().(*msgpack.Decoder)
+	if adaptJSON {
+		decoder.SetCustomStructTag("json")
+	} else {
+		decoder.SetCustomStructTag("")
+	}
+	return decoder
+}
+
+func PutMsgPackDecoder(decoder *msgpack.Decoder) {
+	decoder.Reset(nil)
+	MsgPackDecoderPool.Put(decoder)
+}
+
+func MsgPackUnmarshal(data []byte, obj any, adaptJSON bool) error {
+	decoder := GetMsgPackDecoder(adaptJSON)
+	defer PutMsgPackDecoder(decoder)
+
+	decoder.Reset(bytes.NewReader(data))
+	return decoder.Decode(obj)
+}
