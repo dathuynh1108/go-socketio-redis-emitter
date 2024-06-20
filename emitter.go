@@ -28,17 +28,24 @@ type Options struct {
 type Emitter struct {
 	redis  redis.UniversalClient
 	prefix string
-	rooms  []string
-	flags  map[string]interface{}
 	uid    string
+
+	session *EmitterSession
+}
+
+type EmitterSession struct {
+	rooms []string
+	flags map[string]interface{}
 }
 
 // NewEmitter Emitter constructor
 func NewEmitter(opts *Options) *Emitter {
 	emitter := &Emitter{
 		redis: opts.Redis,
-		rooms: make([]string, 0),
-		flags: make(map[string]interface{}),
+		session: &EmitterSession{
+			rooms: make([]string, 0),
+			flags: make(map[string]interface{}),
+		},
 	}
 	emitter.prefix = "socket.io"
 	if opts.Key != "" {
@@ -72,14 +79,14 @@ func (e *Emitter) Emit(ctx context.Context, data ...interface{}) (*Emitter, erro
 	packet["data"] = data
 
 	packet["nsp"] = "/"
-	if nsp, ok := e.flags["nsp"]; ok {
+	if nsp, ok := e.session.flags["nsp"]; ok {
 		packet["nsp"] = nsp
-		delete(e.flags, "nsp")
+		delete(e.session.flags, "nsp")
 	}
 
 	opts := map[string]interface{}{
-		"rooms": e.rooms,
-		"flags": e.flags,
+		"rooms": e.session.rooms,
+		"flags": e.session.flags,
 	}
 
 	chn := fmt.Sprintf("%s#%s#", e.prefix, packet["nsp"])
@@ -89,8 +96,8 @@ func (e *Emitter) Emit(ctx context.Context, data ...interface{}) (*Emitter, erro
 		return nil, err
 	}
 
-	if len(e.rooms) > 0 {
-		for _, room := range e.rooms {
+	if len(e.session.rooms) > 0 {
+		for _, room := range e.session.rooms {
 			chnRoom := fmt.Sprintf("%s%s#", chn, room)
 			e.redis.Publish(ctx, chnRoom, string(buf))
 		}
@@ -98,19 +105,19 @@ func (e *Emitter) Emit(ctx context.Context, data ...interface{}) (*Emitter, erro
 		e.redis.Publish(ctx, chn, string(buf))
 	}
 
-	e.rooms = make([]string, 0)
-	e.flags = make(map[string]interface{})
+	e.session.rooms = make([]string, 0)
+	e.session.flags = make(map[string]interface{})
 	return e, nil
 }
 
 // In Limit emission to a certain `room`
 func (e *Emitter) In(room string) *Emitter {
-	for _, r := range e.rooms {
+	for _, r := range e.session.rooms {
 		if r == room {
 			return e
 		}
 	}
-	e.rooms = append(e.rooms, room)
+	e.session.rooms = append(e.session.rooms, room)
 	return e
 }
 
@@ -121,26 +128,32 @@ func (e *Emitter) To(room string) *Emitter {
 
 // Of Limit emission to certain `namespace`
 func (e *Emitter) Of(namespace string) *Emitter {
-	e.flags["nsp"] = namespace
+	e.session.flags["nsp"] = namespace
 	return e
 }
 
 // JSON flag
 func (e *Emitter) JSON() *Emitter {
-	e.flags["json"] = true
+	e.session.flags["json"] = true
 	return e
 }
 
 // Volatile flag
 func (e *Emitter) Volatile() *Emitter {
-	e.flags["volatile"] = true
+	e.session.flags["volatile"] = true
 	return e
 }
 
 // Broadcast flag
 func (e *Emitter) Broadcast() *Emitter {
-	e.flags["broadcast"] = true
+	e.session.flags["broadcast"] = true
 	return e
+}
+
+// Reset session data of emitter
+func (e *Emitter) Reset() {
+	e.session.rooms = make([]string, 0)
+	e.session.flags = make(map[string]interface{})
 }
 
 func hasBin(data ...interface{}) bool {
